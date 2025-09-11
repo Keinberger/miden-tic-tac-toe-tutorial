@@ -21,6 +21,7 @@ import {
   OutputNote,
   OutputNotesArray,
   TransactionRequestBuilder,
+  Address,
 } from "@demox-labs/miden-sdk";
 
 import makeMoveNoteCode from "./notes/make_a_move_code";

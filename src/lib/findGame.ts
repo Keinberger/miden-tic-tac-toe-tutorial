@@ -1,4 +1,4 @@
-import { AccountId, WebClient } from "@demox-labs/miden-sdk";
+import { Address, WebClient } from "@demox-labs/miden-sdk";
 
 import { NODE_URL } from "./constants";
 
@@ -14,8 +14,10 @@ export async function findGame(
 
   try {
     // Convert string IDs to AccountId objects
-    const gameAccountId = AccountId.fromBech32(gameAccountIdString);
-    const connectedWalletId = AccountId.fromBech32(connectedWalletIdString);
+    const gameAccountId = Address.fromBech32(gameAccountIdString).accountId();
+    const connectedWalletId = Address.fromBech32(
+      connectedWalletIdString
+    ).accountId();
 
     // Create client instance
     const client = await WebClient.createClient(NODE_URL);

@@ -43,14 +43,14 @@ export async function createGame(
   console.log("Generated accounts");
 
   // Building the tic tac toe contract
-  let assembler = TransactionKernel.assembler().withDebugMode(true);
-  let emptyStorageSlot = StorageSlot.emptyValue();
-  let storageMap = new StorageMap();
-  let storageSlotMap = StorageSlot.map(storageMap);
+  const assembler = TransactionKernel.assembler().withDebugMode(true);
+  const emptyStorageSlot = StorageSlot.emptyValue();
+  const storageMap = new StorageMap();
+  const storageSlotMap = StorageSlot.map(storageMap);
 
   console.log("before game component");
 
-  let gameComponent = AccountComponent.compile(gameContractCode, assembler, [
+  const gameComponent = AccountComponent.compile(gameContractCode, assembler, [
     // player1 storage slot
     emptyStorageSlot,
     // player2 storage slot
@@ -65,7 +65,7 @@ export async function createGame(
 
   console.log("after game component");
 
-  let seed = new Uint8Array(32);
+  const seed = new Uint8Array(32);
   crypto.getRandomValues(seed);
 
   const noAuth = AccountComponent.compile(

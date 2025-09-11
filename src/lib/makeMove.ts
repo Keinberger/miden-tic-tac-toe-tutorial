@@ -1,5 +1,4 @@
 import {
-  AccountId,
   AssemblerUtils,
   TransactionKernel,
   NoteInputs,
@@ -20,6 +19,7 @@ import {
   TransactionRequestBuilder,
   AccountInterface,
   NetworkId,
+  Address,
 } from "@demox-labs/miden-sdk";
 import {
   type MidenTransaction,
@@ -43,8 +43,10 @@ export async function makeMove(
   }
 
   // Convert string IDs to AccountId objects
-  const gameContractId = AccountId.fromBech32(gameContractIdString);
-  const connectedWalletId = AccountId.fromBech32(connectedWalletIdString);
+  const gameContractId = Address.fromBech32(gameContractIdString).accountId();
+  const connectedWalletId = Address.fromBech32(
+    connectedWalletIdString
+  ).accountId();
 
   // Create client instance
   const client = await WebClient.createClient(NODE_URL);
