@@ -15,6 +15,7 @@
     "@demox-labs/miden-wallet-adapter-react": "^0.5.1",
     "@demox-labs/miden-wallet-adapter-reactui": "^0.5.1",
     "@tailwindcss/vite": "^4.1.13",
+    "buffer": "^6.0.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss": "^4.1.13"
