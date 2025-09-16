@@ -4,11 +4,10 @@ import { WalletMultiButton } from "@demox-labs/miden-wallet-adapter-reactui";
 import { createGame } from "../lib/createGame";
 import { findGame } from "../lib/findGame";
 import { makeMove } from "../lib/makeMove";
-import { getEndGameTransactionRequest } from "../lib/endGame";
 import {
-  CustomTransaction,
-  Transaction,
-  TransactionType,
+  // CustomTransaction,
+  // Transaction,
+  // TransactionType,
   type MidenTransaction,
 } from "@demox-labs/miden-wallet-adapter";
 
@@ -18,16 +17,16 @@ type BoardState = (Player | null)[];
 export default function Game() {
   const [board, setBoard] = useState<BoardState>(() => Array(9).fill(null));
   const [currentPlayer, setCurrentPlayer] = useState<Player>("X");
-  const [gameId, setGameId] = useState<string | null>(null);
   const [showCreateGameForm, setShowCreateGameForm] = useState(false);
   const [player1Id, setPlayer1Id] = useState("");
   const [player2Id, setPlayer2Id] = useState("");
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [isGeneratingPlayer2, setIsGeneratingPlayer2] = useState(false);
-  const [gameAccountId, setGameAccountId] = useState("");
+  const [nonce, setNonce] = useState<number | null>(null);
+  const [currentGameNonce, setCurrentGameNonce] = useState<number | null>(null);
   const [isFindingGame, setIsFindingGame] = useState(false);
   const [showFindGameForm, setShowFindGameForm] = useState(false);
-  const [isEndingGame, setIsEndingGame] = useState(false);
+  const [isCastingWin, setIsCastingWin] = useState(false);
 
   const {
     wallet,
@@ -62,7 +61,7 @@ export default function Game() {
 
   // Check if the current connected user has a winning line
   const currentUserHasWon = (): boolean => {
-    if (!gameId || !connected) return false;
+    if (!currentGameNonce || !connected) return false;
 
     // For now, we'll assume the connected user is playing as 'X'
     // TODO: This should be determined based on which player the connected wallet is
@@ -75,12 +74,12 @@ export default function Game() {
 
   // Internal function to handle making a move
   const executeMove = async (
-    gameId: string,
+    nonce: number,
     accountIdString: string,
     requestTransaction: (transaction: MidenTransaction) => Promise<string>
   ) => {
     try {
-      await makeMove(gameId, accountIdString, requestTransaction);
+      await makeMove(nonce, accountIdString, requestTransaction);
     } catch (error) {
       console.error("Failed to make move:", error);
       alert("Failed to make move. Please try again.");
@@ -88,7 +87,13 @@ export default function Game() {
   };
 
   const handleSquareClick = async (index: number) => {
-    if (board[index] || !gameId || !rawAccountId || !requestTransaction) return;
+    if (
+      board[index] ||
+      !currentGameNonce ||
+      !rawAccountId ||
+      !requestTransaction
+    )
+      return;
 
     // Only run on client side
     if (typeof window === "undefined") return;
@@ -98,47 +103,7 @@ export default function Game() {
     setBoard(newBoard);
     setCurrentPlayer(currentPlayer === "X" ? "O" : "X");
 
-    await executeMove(gameId, rawAccountId, requestTransaction);
-  };
-
-  const handleEndGame = async () => {
-    if (!gameId || !wallet?.adapter?.accountId) {
-      alert("Game ID or wallet not available");
-      return;
-    }
-
-    setIsEndingGame(true);
-    try {
-      // For now, we'll use playerSlot 1 (assuming connected user is player 1)
-      // TODO: This should be determined based on which player the connected wallet is
-      const noteRequest = await getEndGameTransactionRequest(
-        gameId,
-        wallet.adapter.accountId,
-        BigInt(1)
-      );
-
-      if (!noteRequest) {
-        alert("Failed to get end game transaction request");
-        return;
-      }
-
-      const customTransaction = new CustomTransaction(
-        wallet.adapter.accountId,
-        noteRequest
-      );
-
-      const transaction = new Transaction(
-        TransactionType.Custom,
-        customTransaction
-      );
-      if (requestTransaction) await requestTransaction(transaction);
-      console.log("End game transaction submitted");
-    } catch (error) {
-      console.error("Failed to end game:", error);
-      alert("Failed to end game. Please try again.");
-    } finally {
-      setIsEndingGame(false);
-    }
+    await executeMove(currentGameNonce, rawAccountId, requestTransaction);
   };
 
   // Internal function to generate a new wallet
@@ -194,10 +159,10 @@ export default function Game() {
     setIsCreatingGame(true);
 
     try {
-      const newGameId = await createGame(player1Id, player2Id);
-      setGameId(newGameId);
+      const newGameNonce = await createGame(player1Id, player2Id);
+      setCurrentGameNonce(newGameNonce);
       setShowCreateGameForm(false);
-      console.log("Game created with ID:", newGameId);
+      console.log("Game created with nonce:", newGameNonce);
     } catch (error) {
       console.error("Failed to create game:", error);
       alert("Failed to create game. Please try again.");
@@ -207,17 +172,14 @@ export default function Game() {
   };
 
   // Internal function to find and join a game
-  const findAndJoinGame = async (
-    gameAccountId: string,
-    accountIdString: string
-  ) => {
+  const findAndJoinGame = async (nonce: number, accountIdString: string) => {
     try {
-      const isPlayerInGame = await findGame(gameAccountId, accountIdString);
+      const isPlayerInGame = await findGame(accountIdString, nonce);
 
       if (isPlayerInGame) {
-        setGameId(gameAccountId);
+        setCurrentGameNonce(nonce);
         setShowFindGameForm(false);
-        console.log("Successfully joined game:", gameAccountId);
+        console.log("Successfully joined game:", nonce);
       } else {
         alert("You are not a player in this game or the game was not found.");
       }
@@ -228,8 +190,8 @@ export default function Game() {
   };
 
   const handleFindGame = async () => {
-    if (!gameAccountId || !rawAccountId) {
-      alert("Please provide a game account ID and connect your wallet");
+    if (!nonce || !rawAccountId) {
+      alert("Please provide a nonce and connect your wallet");
       return;
     }
 
@@ -237,7 +199,7 @@ export default function Game() {
     if (typeof window === "undefined") return;
 
     setIsFindingGame(true);
-    await findAndJoinGame(gameAccountId, rawAccountId);
+    await findAndJoinGame(nonce, rawAccountId);
     setIsFindingGame(false);
   };
 
@@ -252,6 +214,27 @@ export default function Game() {
         console.error("Failed to get wallet accounts:", error);
       }
     }
+  };
+
+  // Boilerplate function for cast win
+  const handleCastWin = async () => {
+    if (!currentGameNonce || !rawAccountId) {
+      alert("No game found or wallet not connected");
+      return;
+    }
+
+    setIsCastingWin(true);
+
+    try {
+      // TODO: Implement castWin function
+      console.log("Cast win functionality not yet implemented");
+      alert("Cast win functionality not yet implemented");
+    } catch (error) {
+      console.error("Failed to cast win:", error);
+      alert("Failed to cast win. Please try again.");
+    }
+
+    setIsCastingWin(false);
   };
 
   // Auto-populate player1 ID when wallet connects
@@ -274,24 +257,24 @@ export default function Game() {
 
       {/* Wallet Connect - Top Right */}
       <div className="absolute top-6 right-6 flex gap-4 items-center">
-        {gameId && (
+        {currentGameNonce && (
           <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 px-4 py-2">
             <p className="text-green-400 font-semibold text-sm">
-              Game: {gameId.slice(0, 12)}...
+              Game: {currentGameNonce}
             </p>
           </div>
         )}
-        {gameId && currentUserHasWon() && (
+        {currentGameNonce && currentUserHasWon() && (
           <button
-            onClick={handleEndGame}
-            disabled={isEndingGame}
+            onClick={handleCastWin}
+            disabled={isCastingWin}
             className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
           >
-            {isEndingGame ? "Ending..." : "End Game"}
+            {isCastingWin ? "Casting..." : "Cast win"}
           </button>
         )}
         <WalletMultiButton />
-        {!gameId && (
+        {!currentGameNonce && (
           <button
             onClick={togglePlayer}
             className="px-4 py-2 bg-orange-500 hover:bg-orange-600 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -303,7 +286,7 @@ export default function Game() {
 
       {/* Main Content */}
       <div className="flex items-center justify-center min-h-screen">
-        {!gameId ? (
+        {!currentGameNonce ? (
           <div className="bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 p-8 max-w-md w-full">
             {!showCreateGameForm && !showFindGameForm ? (
               <div className="text-center">
@@ -402,20 +385,22 @@ export default function Game() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Game Account ID
+                      Nonce
                     </label>
                     <input
-                      type="text"
-                      value={gameAccountId}
-                      onChange={(e) => setGameAccountId(e.target.value)}
+                      type="number"
+                      value={nonce || ""}
+                      onChange={(e) =>
+                        setNonce(e.target.value ? Number(e.target.value) : null)
+                      }
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-400"
-                      placeholder="Enter Game Account ID (bech32 format)"
+                      placeholder="Enter nonce (number)"
                     />
                   </div>
                   <div className="flex gap-4">
                     <button
                       onClick={handleFindGame}
-                      disabled={isFindingGame || !gameAccountId || !connected}
+                      disabled={isFindingGame || !nonce || !connected}
                       className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-all duration-200"
                     >
                       {isFindingGame ? "Finding..." : "Play"}

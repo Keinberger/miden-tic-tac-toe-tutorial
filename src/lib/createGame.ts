@@ -26,10 +26,10 @@ const incrNonceAuthCode = `use.miden::account
 export async function createGame(
   player1IdString: string,
   player2IdString: string
-): Promise<string> {
+): Promise<number> {
   if (typeof window === "undefined") {
     console.warn("webClient() can only run in the browser");
-    return "";
+    return 0;
   }
 
   // Create client instance
@@ -37,8 +37,8 @@ export async function createGame(
     accountsToImport: [],
   });
 
-  const player1Id = AccountId.fromBech32(player1IdString);
-  const player2Id = AccountId.fromBech32(player2IdString);
+  const player1Id = AccountId.fromHex(player1IdString);
+  const player2Id = AccountId.fromHex(player2IdString);
 
   console.log("Generated accounts");
 
@@ -134,5 +134,5 @@ export async function createGame(
   await client.syncState();
 
   // Return the game contract account ID
-  return gameContract.account.id().toString();
+  return 1;
 }

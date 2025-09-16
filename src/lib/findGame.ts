@@ -1,23 +1,15 @@
-import { Address, WebClient } from "@demox-labs/miden-sdk";
-
-import { NODE_URL } from "./constants";
+import { AccountId, Felt, WebClient, Word } from "@demox-labs/miden-sdk";
+import { NODE_URL, TIC_TAC_TOE_CONTRACT_ID } from "./constants";
 
 // lib/findGame.ts
 export async function findGame(
-  gameAccountIdString: string,
-  connectedWalletIdString: string
+  connectedWalletIdString: string,
+  nonce: number
 ): Promise<boolean> {
-  if (typeof window === "undefined") {
-    console.warn("findGame() can only run in the browser");
-    return false;
-  }
-
   try {
     // Convert string IDs to AccountId objects
-    const gameAccountId = Address.fromBech32(gameAccountIdString).accountId();
-    const connectedWalletId = Address.fromBech32(
-      connectedWalletIdString
-    ).accountId();
+    const gameAccountId = AccountId.fromHex(TIC_TAC_TOE_CONTRACT_ID);
+    const connectedWalletId = AccountId.fromHex(connectedWalletIdString);
 
     // Create client instance
     const client = await WebClient.createClient(NODE_URL);
@@ -39,54 +31,47 @@ export async function findGame(
     // Check storage slots 1 and 2 for player1 and player2 account IDs
     const storage = gameAccount.storage();
 
+    const nonceWord = Word.newFromFelts([
+      new Felt(BigInt(0)),
+      new Felt(BigInt(0)),
+      new Felt(BigInt(0)),
+      new Felt(BigInt(nonce)),
+    ]);
+
     // Storage slot 1: player1 account ID
-    const player1Slot = storage.getItem(0);
-    // Storage slot 2: player2 account ID
-    const player2Slot = storage.getItem(1);
+    const playerIdsSlot = storage.getMapItem(1, nonceWord);
 
     console.log("before connected id");
 
-    // const connectedId = AccountId.fromBech32(
-    //   "mtst1qrhk2vv5tk5xgyprjkwpep87t4cqqwa3vqx",
-    // );
     const connectedIdPrefix = connectedWalletId.prefix();
     const connectedIdSuffix = connectedWalletId.suffix();
 
     // 0, 0, prefix, suffix (reversed)
-    if (player1Slot !== undefined) {
-      const felts = player1Slot.toFelts();
+    if (playerIdsSlot !== undefined) {
+      const felts = playerIdsSlot.toFelts();
 
-      const prefixFelt = felts[1];
-      const suffixFelt = felts[0];
+      console.log("Felts: ", felts);
 
-      console.log(prefixFelt.asInt(), suffixFelt.asInt());
+      const player1IdPrefixFelt = felts[3];
+      const player1IdSuffixFelt = felts[2];
+      const player2IdPrefixFelt = felts[1];
+      const player2IdSuffixFelt = felts[0];
+
+      console.log(player1IdPrefixFelt.asInt(), player1IdSuffixFelt.asInt());
       console.log(connectedIdPrefix.asInt(), connectedIdSuffix.asInt());
 
       if (
-        prefixFelt.asInt() === connectedIdPrefix.asInt() &&
-        suffixFelt.asInt() === connectedIdSuffix.asInt()
+        player1IdPrefixFelt.asInt() === connectedIdPrefix.asInt() &&
+        player1IdSuffixFelt.asInt() === connectedIdSuffix.asInt()
+      ) {
+        return true;
+      } else if (
+        player2IdPrefixFelt.asInt() === connectedIdPrefix.asInt() &&
+        player2IdSuffixFelt.asInt() === connectedIdSuffix.asInt()
       ) {
         return true;
       }
     }
-
-    if (player2Slot !== undefined) {
-      const felts = player2Slot.toFelts();
-
-      const prefixFelt = felts[1];
-      const suffixFelt = felts[0];
-
-      console.log(prefixFelt.asInt(), suffixFelt.asInt());
-      console.log(connectedIdPrefix.asInt(), connectedIdSuffix.asInt());
-
-      if (
-        prefixFelt.asInt() === connectedIdPrefix.asInt() &&
-        suffixFelt.asInt() === connectedIdSuffix.asInt()
-      ) {
-        return true;
-      }
-    }
-
     return false;
   } catch (error) {
     console.error("Failed to find game:", error);

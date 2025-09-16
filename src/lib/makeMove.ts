@@ -33,15 +33,10 @@ import { NODE_URL } from "./constants";
 
 // lib/makeMove.ts
 export async function makeMove(
-  gameContractIdString: string,
+  nonce: number,
   connectedWalletIdString: string,
   requestTransaction: (transaction: MidenTransaction) => Promise<string>
 ): Promise<string | null> {
-  if (typeof window === "undefined") {
-    console.warn("webClient() can only run in the browser");
-    return null;
-  }
-
   // Convert string IDs to AccountId objects
   const gameContractId = Address.fromBech32(gameContractIdString).accountId();
   const connectedWalletId = Address.fromBech32(

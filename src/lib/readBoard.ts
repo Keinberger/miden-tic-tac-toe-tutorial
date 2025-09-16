@@ -29,11 +29,6 @@ import gameContractCode from "./contracts/tic_tac_toe_code";
 
 // lib/makeMove.ts
 export async function readBoard(gameContractIdBech32: string): Promise<void> {
-  if (typeof window === "undefined") {
-    console.warn("webClient() can only run in the browser");
-    return;
-  }
-
   const nodeEndpoint = "http://localhost:57291";
   const client = await WebClient.createClient(nodeEndpoint);
   console.log("Current block number: ", (await client.syncState()).blockNum());
