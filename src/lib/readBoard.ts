@@ -1,67 +1,66 @@
+import { AccountId, Word } from "@demox-labs/miden-sdk";
 import {
-  AccountId,
-  AssemblerUtils,
-  AccountStorageMode,
-  StorageSlot,
-  TransactionKernel,
-  NoteInputs,
-  NoteMetadata,
-  NoteScript,
-  FeltArray,
-  WebClient,
-  NoteAssets,
-  Felt,
-  Word,
-  NoteTag,
-  NoteType,
-  NoteExecutionMode,
-  NoteExecutionHint,
-  NoteRecipient,
-  Note,
-  OutputNote,
-  OutputNotesArray,
-  TransactionRequestBuilder,
-  Address,
-} from "@demox-labs/miden-sdk";
+  PLAYER1_VALUES_MAPPING_SLOT,
+  PLAYER2_VALUES_MAPPING_SLOT,
+  TIC_TAC_TOE_CONTRACT_ID,
+} from "./constants";
+import {
+  getAccount,
+  getNonceWord,
+  instantiateClient,
+  convertContractIndexToBoardIndex,
+} from "./utils";
 
-import makeMoveNoteCode from "./notes/make_a_move_code";
-import gameContractCode from "./contracts/tic_tac_toe_code";
+export async function readBoard(
+  nonce: number
+): Promise<{ player1Values: number[]; player2Values: number[] }> {
+  const gameAccountId = AccountId.fromHex(TIC_TAC_TOE_CONTRACT_ID);
+  // Create client instance
+  const client = await instantiateClient({
+    accountsToImport: [],
+  });
+  await client.syncState();
 
-// lib/makeMove.ts
-export async function readBoard(gameContractIdBech32: string): Promise<void> {
-  const nodeEndpoint = "http://localhost:57291";
-  const client = await WebClient.createClient(nodeEndpoint);
-  console.log("Current block number: ", (await client.syncState()).blockNum());
-
-  // Generate alice and bob wallets
-  const alice = await client.newWallet(AccountStorageMode.public(), true);
-  const bob = await client.newWallet(AccountStorageMode.public(), true);
-
-  // Building the tic tac toe contract
-  const assembler = TransactionKernel.assembler();
-
-  const gameContractId = AccountId.fromBech32(gameContractIdBech32);
-
-  // Reading the public state of the tic tac toe contract from testnet,
-  // and importing it into the WebClient
-  let gameContractAccount = await client.getAccount(gameContractId);
-  if (!gameContractAccount) {
-    await client.importAccountById(gameContractId);
-    await client.syncState();
-    gameContractAccount = await client.getAccount(gameContractId);
-    if (!gameContractAccount) {
-      throw new Error(
-        `Account not found after import: ${gameContractIdBech32}`
-      );
-    }
+  // Get the game account to access its storage
+  const gameAccount = await getAccount(client, gameAccountId);
+  if (!gameAccount) {
+    throw new Error(`Account not found after import: ${gameAccountId}`);
   }
 
-  const gameContractMapping = gameContractAccount.storage().getItem(4);
+  const nonceWord = getNonceWord(nonce);
 
-  // TODO: use RpoDigest to compute the board
+  let player1ValuesMapping: Word | undefined;
+  try {
+    player1ValuesMapping = gameAccount
+      .storage()
+      .getMapItem(PLAYER1_VALUES_MAPPING_SLOT, nonceWord);
+  } catch {
+    console.warn("Player 1 values mapping not found");
+  }
 
-  // TODO: integrate wallet SDK to submit make move transaction
+  let player2ValuesMapping: Word | undefined;
+  try {
+    player2ValuesMapping = gameAccount
+      .storage()
+      .getMapItem(PLAYER2_VALUES_MAPPING_SLOT, nonceWord);
+  } catch {
+    console.warn("Player 2 values mapping not found");
+  }
 
-  // Sync state
-  await client.syncState();
+  const player1Values = player1ValuesMapping
+    ? mappingValuesToIndexes(player1ValuesMapping)
+    : [];
+  const player2Values = player2ValuesMapping
+    ? mappingValuesToIndexes(player2ValuesMapping)
+    : [];
+
+  return { player1Values, player2Values };
+}
+
+function mappingValuesToIndexes(mappingWord: Word): number[] {
+  const felts = mappingWord.toFelts();
+  return felts
+    .map((felt) => felt.asInt())
+    .filter((value) => value !== 0n)
+    .map((value) => convertContractIndexToBoardIndex(Number(value)));
 }
