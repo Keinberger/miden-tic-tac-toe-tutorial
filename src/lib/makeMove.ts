@@ -4,13 +4,10 @@ import {
   NoteInputs,
   NoteMetadata,
   FeltArray,
-  WebClient,
   NoteAssets,
   Felt,
-  Word,
   NoteTag,
   NoteType,
-  NoteExecutionMode,
   NoteExecutionHint,
   NoteRecipient,
   Note,
@@ -20,6 +17,7 @@ import {
   AccountInterface,
   NetworkId,
   Address,
+  AccountId,
 } from "@demox-labs/miden-sdk";
 import {
   type MidenTransaction,
@@ -29,27 +27,38 @@ import {
 
 import makeMoveNoteCode from "./notes/make_a_move_code";
 import gameContractCode from "./contracts/tic_tac_toe_code";
-import { NODE_URL } from "./constants";
+import { TIC_TAC_TOE_CONTRACT_ID } from "./constants";
+import {
+  generateRandomSerialNumber,
+  getNonceWord,
+  instantiateClient,
+} from "./utils";
 
 // lib/makeMove.ts
 export async function makeMove(
   nonce: number,
+  fieldIndex: number,
   connectedWalletIdString: string,
   requestTransaction: (transaction: MidenTransaction) => Promise<string>
 ): Promise<string | null> {
-  // Convert string IDs to AccountId objects
-  const gameContractId = Address.fromBech32(gameContractIdString).accountId();
+  if (typeof window === "undefined") {
+    console.warn("webClient() can only run in the browser");
+    return "";
+  }
+
+  // Create client instance
+  const client = await instantiateClient({
+    accountsToImport: [],
+  });
+
   const connectedWalletId = Address.fromBech32(
     connectedWalletIdString
   ).accountId();
 
-  // Create client instance
-  const client = await WebClient.createClient(NODE_URL);
-  const state = await client.syncState();
-  console.log("Current block number: ", state.blockNum());
-
   // Building the tic tac toe contract
   let assembler = TransactionKernel.assembler();
+
+  const gameContractId = AccountId.fromHex(TIC_TAC_TOE_CONTRACT_ID);
 
   // Reading the public state of the tic tac toe contract from testnet,
   // and importing it into the WebClient
@@ -74,18 +83,14 @@ export async function makeMove(
 
   const noteScript = assembler.compileNoteScript(makeMoveNoteCode);
 
-  const emptyAssets = new NoteAssets([]);
-  const index: bigint = BigInt(5);
-  const noteInputs = new NoteInputs(new FeltArray([new Felt(index)]));
-  const serialNumberValues = generateRandomSerialNumber();
-  const serialNumber = Word.newFromFelts([
-    new Felt(serialNumberValues[0]),
-    new Felt(serialNumberValues[1]),
-    new Felt(serialNumberValues[2]),
-    new Felt(serialNumberValues[3]),
-  ]);
-  const recipient = new NoteRecipient(serialNumber, noteScript, noteInputs);
-  const noteTag = NoteTag.forPublicUseCase(0, 0, NoteExecutionMode.newLocal());
+  console.log("nonce", nonce);
+  console.log("fieldIndex", fieldIndex);
+
+  const nonceWord = getNonceWord(nonce);
+  const noteInputs = new NoteInputs(
+    new FeltArray([...nonceWord.toFelts(), new Felt(BigInt(fieldIndex))])
+  );
+  const noteTag = NoteTag.fromAccountId(gameContractAccount.id());
   const metadata = new NoteMetadata(
     connectedWalletId,
     NoteType.Public,
@@ -93,14 +98,18 @@ export async function makeMove(
     NoteExecutionHint.always(),
     new Felt(BigInt(0))
   );
-  const makeMoveNote = new Note(emptyAssets, metadata, recipient);
+  const makeMoveNote = new Note(
+    new NoteAssets([]),
+    metadata,
+    new NoteRecipient(generateRandomSerialNumber(), noteScript, noteInputs)
+  );
 
   const noteRequest = new TransactionRequestBuilder()
     .withOwnOutputNotes(new OutputNotesArray([OutputNote.full(makeMoveNote)]))
     .build();
 
   const tx = new CustomTransaction(
-    connectedWalletId.toBech32(NetworkId.Testnet, AccountInterface.BasicWallet),
+    connectedWalletId.toBech32(NetworkId.Testnet, AccountInterface.Unspecified),
     noteRequest
   );
 
@@ -109,16 +118,9 @@ export async function makeMove(
     payload: tx,
   });
 
+  console.log("makeMoveNote.id().toString()", makeMoveNote.id().toString());
+
   await client.syncState();
 
   return txId;
-}
-
-export function generateRandomSerialNumber(): bigint[] {
-  return [
-    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
-    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
-    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
-    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
-  ];
 }

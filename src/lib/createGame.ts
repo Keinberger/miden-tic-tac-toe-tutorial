@@ -6,20 +6,18 @@ import {
   FeltArray,
   NoteAssets,
   Felt,
-  Word,
   NoteTag,
   NoteType,
-  NoteExecutionMode,
   NoteExecutionHint,
   NoteRecipient,
   Note,
   OutputNote,
   OutputNotesArray,
   TransactionRequestBuilder,
-  AccountInterface,
-  NetworkId,
   AccountId,
   Address,
+  NetworkId,
+  AccountInterface,
 } from "@demox-labs/miden-sdk";
 import {
   type MidenTransaction,
@@ -29,8 +27,8 @@ import {
 
 import gameContractCode from "./contracts/tic_tac_toe_code";
 import createGameNoteCode from "./notes/create_game_note_code";
-import { instantiateClient } from "./utils";
-import { TIC_TAC_TOE_CONTRACT_ID } from "./constants";
+import { instantiateClient, generateRandomSerialNumber } from "./utils";
+import { NONCE_SLOT, TIC_TAC_TOE_CONTRACT_ID } from "./constants";
 
 // lib/createGame.ts
 export async function createGame(
@@ -81,44 +79,47 @@ export async function createGame(
 
   const noteScript = assembler.compileNoteScript(createGameNoteCode);
 
-  let noteInputs = new NoteInputs(
+  const noteInputs = new NoteInputs(
     new FeltArray([player2Id.suffix(), player2Id.prefix()])
   );
-  const randomInts = Array.from({ length: 4 }, () =>
-    Math.floor(Math.random() * 100000)
-  );
-  let serialNumber = new Word(new BigUint64Array(randomInts.map(BigInt)));
-  let recipient = new NoteRecipient(serialNumber, noteScript, noteInputs);
-  let noteTag = NoteTag.fromAccountId(gameContractAccount.id());
-  let metadata = new NoteMetadata(
+  const noteTag = NoteTag.fromAccountId(gameContractAccount.id());
+  const metadata = new NoteMetadata(
     connectedWalletId,
     NoteType.Public,
     noteTag,
     NoteExecutionHint.always(),
     new Felt(BigInt(0))
   );
-  let makeMoveNote = new Note(new NoteAssets([]), metadata, recipient);
+  const createGameNote = new Note(
+    new NoteAssets([]),
+    metadata,
+    new NoteRecipient(generateRandomSerialNumber(), noteScript, noteInputs)
+  );
 
-  let noteRequest = new TransactionRequestBuilder()
-    .withOwnOutputNotes(new OutputNotesArray([OutputNote.full(makeMoveNote)]))
+  const noteRequest = new TransactionRequestBuilder()
+    .withOwnOutputNotes(new OutputNotesArray([OutputNote.full(createGameNote)]))
     .build();
 
-  const requestBytes = noteRequest.serialize();
-  // console.log("requestBytes", Buffer.from(requestBytes).toString("base64"));
-
-  const tx = new CustomTransaction(connectedWalletIdString, noteRequest);
+  const tx = new CustomTransaction(
+    connectedWalletId.toBech32(NetworkId.Testnet, AccountInterface.Unspecified),
+    noteRequest
+  );
 
   const txId = await requestTransaction({
     type: TransactionType.Custom,
     payload: tx,
   });
 
+  console.log("createGameNote.id().toString()", createGameNote.id().toString());
+
   await client.syncState();
 
   // Get new nonce
-  const nonceStorage = gameContractAccount.storage().getItem(1)?.toU64s();
-  console.log(nonceStorage);
+  const nonceStorage = gameContractAccount
+    .storage()
+    .getItem(NONCE_SLOT)
+    ?.toU64s();
 
   // Return the game contract account ID
-  return { nonce: 1, txIx: txId };
+  return { nonce: Number(nonceStorage?.[3]), txIx: txId };
 }
