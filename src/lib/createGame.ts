@@ -68,6 +68,12 @@ export async function createGame(
     }
   }
 
+  // Get new nonce
+  const oldNonceStorage = gameContractAccount
+    .storage()
+    .getItem(NONCE_SLOT)
+    ?.toU64s();
+
   // Creating the library to call the counter contract
   const gameComponentLib = AssemblerUtils.createAccountComponentLibrary(
     assembler, // assembler
@@ -114,12 +120,6 @@ export async function createGame(
 
   await client.syncState();
 
-  // Get new nonce
-  const nonceStorage = gameContractAccount
-    .storage()
-    .getItem(NONCE_SLOT)
-    ?.toU64s();
-
   // Return the game contract account ID
-  return { nonce: Number(nonceStorage?.[3]), txIx: txId };
+  return { nonce: Number(oldNonceStorage?.[3]) + 1, txIx: txId };
 }
