@@ -148,7 +148,7 @@ export default function Game() {
   };
 
   const handleCreateGame = async () => {
-    if (!player1Id || !player2Id) {
+    if (!rawAccountId || !player2Id || !requestTransaction) {
       alert("Please provide both player account IDs");
       return;
     }
@@ -159,7 +159,11 @@ export default function Game() {
     setIsCreatingGame(true);
 
     try {
-      const newGameNonce = await createGame(player1Id, player2Id);
+      const { nonce: newGameNonce } = await createGame(
+        player2Id,
+        rawAccountId,
+        requestTransaction
+      );
       setCurrentGameNonce(newGameNonce);
       setShowCreateGameForm(false);
       console.log("Game created with nonce:", newGameNonce);

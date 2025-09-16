@@ -20,7 +20,7 @@ export const instantiateClient = async ({
 
 export const safeAccountImport = async (
   client: any, // WebClient
-  accountId: any, // AccountId
+  accountId: any // AccountId
 ) => {
   if ((await client.getAccount(accountId)) == null) {
     try {
@@ -29,4 +29,13 @@ export const safeAccountImport = async (
       console.warn(e);
     }
   }
+};
+
+export const generateRandomSerialNumber = (): bigint[] => {
+  return [
+    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
+    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
+    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
+    BigInt(Math.floor(Math.random() * 0x1_0000_0000)),
+  ];
 };

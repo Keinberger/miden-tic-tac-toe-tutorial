@@ -1,4 +1,10 @@
-import { AccountId, Felt, WebClient, Word } from "@demox-labs/miden-sdk";
+import {
+  AccountId,
+  Address,
+  Felt,
+  WebClient,
+  Word,
+} from "@demox-labs/miden-sdk";
 import { NODE_URL, TIC_TAC_TOE_CONTRACT_ID } from "./constants";
 
 // lib/findGame.ts
@@ -9,7 +15,10 @@ export async function findGame(
   try {
     // Convert string IDs to AccountId objects
     const gameAccountId = AccountId.fromHex(TIC_TAC_TOE_CONTRACT_ID);
-    const connectedWalletId = AccountId.fromHex(connectedWalletIdString);
+
+    const connectedWalletId = Address.fromBech32(
+      connectedWalletIdString
+    ).accountId();
 
     // Create client instance
     const client = await WebClient.createClient(NODE_URL);
