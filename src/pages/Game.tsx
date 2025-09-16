@@ -4,19 +4,16 @@ import { WalletMultiButton } from "@demox-labs/miden-wallet-adapter-reactui";
 import { createGame } from "../lib/createGame";
 import { findGame } from "../lib/findGame";
 import { makeMove } from "../lib/makeMove";
-import {
-  // CustomTransaction,
-  // Transaction,
-  // TransactionType,
-  type MidenTransaction,
-} from "@demox-labs/miden-wallet-adapter";
+import { type MidenTransaction } from "@demox-labs/miden-wallet-adapter";
+import { readBoard } from "../lib/readBoard";
+import { convertBoardIndexToContractIndex } from "../lib/utils";
 
 type Player = "X" | "O";
 type BoardState = (Player | null)[];
 
 export default function Game() {
   const [board, setBoard] = useState<BoardState>(() => Array(9).fill(null));
-  const [currentPlayer, setCurrentPlayer] = useState<Player>("X");
+  const [currentPlayer, _] = useState<Player>("X");
   const [showCreateGameForm, setShowCreateGameForm] = useState(false);
   const [player1Id, setPlayer1Id] = useState("");
   const [player2Id, setPlayer2Id] = useState("");
@@ -34,12 +31,6 @@ export default function Game() {
     connected,
     requestTransaction,
   } = useWallet();
-
-  useEffect(() => {
-    console.log("🧑‍💼 rawAccountId", rawAccountId);
-    console.log("🧑‍💼 connected", connected);
-    console.log("🧑‍💼 wallet", wallet);
-  }, [rawAccountId, connected, wallet]);
 
   // Check if there's a winning line for the given player
   const checkWinningLine = (board: BoardState, player: Player): boolean => {
@@ -68,18 +59,15 @@ export default function Game() {
     return checkWinningLine(board, currentPlayer === "X" ? "O" : "X");
   };
 
-  const togglePlayer = () => {
-    setCurrentPlayer(currentPlayer === "X" ? "O" : "X");
-  };
-
   // Internal function to handle making a move
   const executeMove = async (
     nonce: number,
+    fieldIndex: number,
     accountIdString: string,
     requestTransaction: (transaction: MidenTransaction) => Promise<string>
   ) => {
     try {
-      await makeMove(nonce, accountIdString, requestTransaction);
+      await makeMove(nonce, fieldIndex, accountIdString, requestTransaction);
     } catch (error) {
       console.error("Failed to make move:", error);
       alert("Failed to make move. Please try again.");
@@ -101,9 +89,16 @@ export default function Game() {
     const newBoard = [...board];
     newBoard[index] = currentPlayer;
     setBoard(newBoard);
-    setCurrentPlayer(currentPlayer === "X" ? "O" : "X");
 
-    await executeMove(currentGameNonce, rawAccountId, requestTransaction);
+    const boardValues = await readBoard(currentGameNonce);
+    console.log("🎲 boardValues", boardValues);
+
+    await executeMove(
+      currentGameNonce,
+      convertBoardIndexToContractIndex(index),
+      rawAccountId,
+      requestTransaction
+    );
   };
 
   // Internal function to generate a new wallet
@@ -278,14 +273,6 @@ export default function Game() {
           </button>
         )}
         <WalletMultiButton />
-        {!currentGameNonce && (
-          <button
-            onClick={togglePlayer}
-            className="px-4 py-2 bg-orange-500 hover:bg-orange-600 rounded-lg text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
-          >
-            Current: {currentPlayer}
-          </button>
-        )}
       </div>
 
       {/* Main Content */}
