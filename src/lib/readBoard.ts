@@ -27,13 +27,11 @@ export async function readBoard(
     throw new Error(`Account not found after import: ${gameAccountId}`);
   }
 
-  const nonceWord = getNonceWord(nonce);
-
   let player1ValuesMapping: Word | undefined;
   try {
     player1ValuesMapping = gameAccount
       .storage()
-      .getMapItem(PLAYER1_VALUES_MAPPING_SLOT, nonceWord);
+      .getMapItem(PLAYER1_VALUES_MAPPING_SLOT, getNonceWord(nonce));
   } catch {
     // throws error if mapping has no values
   }
@@ -42,7 +40,7 @@ export async function readBoard(
   try {
     player2ValuesMapping = gameAccount
       .storage()
-      .getMapItem(PLAYER2_VALUES_MAPPING_SLOT, nonceWord);
+      .getMapItem(PLAYER2_VALUES_MAPPING_SLOT, getNonceWord(nonce));
   } catch {
     // throws error if mapping has no values
   }
@@ -55,6 +53,26 @@ export async function readBoard(
     : [];
 
   return { player1Values, player2Values };
+}
+
+export function createBoardPoller(
+  nonce: number,
+  onUpdate: (boardData: {
+    player1Values: number[];
+    player2Values: number[];
+  }) => void,
+  intervalMs: number = 5000
+): () => void {
+  const interval = setInterval(async () => {
+    try {
+      const boardData = await readBoard(nonce);
+      onUpdate(boardData);
+    } catch (error) {
+      console.error("Error polling board:", error);
+    }
+  }, intervalMs);
+
+  return () => clearInterval(interval);
 }
 
 function mappingValuesToIndexes(mappingWord: Word): number[] {
