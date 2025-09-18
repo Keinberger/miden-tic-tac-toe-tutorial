@@ -6,7 +6,7 @@ import { getNonceWord, instantiateClient, getAccount } from "./utils";
 export async function findGame(
   connectedWalletIdString: string,
   nonce: number
-): Promise<boolean> {
+): Promise<{ found: boolean; isPlayer1: boolean }> {
   try {
     // Convert string IDs to AccountId objects
     const gameAccountId = AccountId.fromHex(TIC_TAC_TOE_CONTRACT_ID);
@@ -51,17 +51,20 @@ export async function findGame(
       const player2IdSuffixFelt = felts[0];
 
       if (
-        (player1IdPrefixFelt.asInt() === connectedIdPrefix.asInt() &&
-          player1IdSuffixFelt.asInt() === connectedIdSuffix.asInt()) ||
-        (player2IdPrefixFelt.asInt() === connectedIdPrefix.asInt() &&
-          player2IdSuffixFelt.asInt() === connectedIdSuffix.asInt())
+        player1IdPrefixFelt.asInt() === connectedIdPrefix.asInt() &&
+        player1IdSuffixFelt.asInt() === connectedIdSuffix.asInt()
       ) {
-        return true;
+        return { isPlayer1: true, found: true };
+      } else if (
+        player2IdPrefixFelt.asInt() === connectedIdPrefix.asInt() &&
+        player2IdSuffixFelt.asInt() === connectedIdSuffix.asInt()
+      ) {
+        return { isPlayer1: false, found: true };
       }
     }
-    return false;
+    return { isPlayer1: false, found: false };
   } catch (error) {
     console.error("Failed to find game:", error);
-    return false;
+    return { isPlayer1: false, found: false };
   }
 }

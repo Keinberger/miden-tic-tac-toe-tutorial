@@ -13,17 +13,25 @@ type BoardState = (Player | null)[];
 
 export default function Game() {
   const [board, setBoard] = useState<BoardState>(() => Array(9).fill(null));
-  const [currentPlayer, _] = useState<Player>("X");
+  const [currentPlayer, setCurrentPlayer] = useState<Player>("X");
   const [showCreateGameForm, setShowCreateGameForm] = useState(false);
   const [player1Id, setPlayer1Id] = useState("");
   const [player2Id, setPlayer2Id] = useState("");
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [isGeneratingPlayer2, setIsGeneratingPlayer2] = useState(false);
-  const [nonce, setNonce] = useState<number | null>(null);
+  const [nonceInput, setNonceInput] = useState<number | null>(null);
   const [currentGameNonce, setCurrentGameNonce] = useState<number | null>(null);
   const [isFindingGame, setIsFindingGame] = useState(false);
   const [showFindGameForm, setShowFindGameForm] = useState(false);
   const [isCastingWin, setIsCastingWin] = useState(false);
+
+  useEffect(() => {
+    if (currentGameNonce) {
+      readBoard(currentGameNonce).then((boardValues) => {
+        console.log("🎲 boardValues", boardValues);
+      });
+    }
+  }, [currentGameNonce]);
 
   const {
     wallet,
@@ -122,7 +130,6 @@ export default function Game() {
         .toString();
 
       setPlayer2Id(id);
-      console.log("Generated Player 2 wallet:", id);
     } catch (error) {
       console.error("Failed to generate wallet:", error);
       alert("Failed to generate wallet. Please try again.");
@@ -173,12 +180,16 @@ export default function Game() {
   // Internal function to find and join a game
   const findAndJoinGame = async (nonce: number, accountIdString: string) => {
     try {
-      const isPlayerInGame = await findGame(accountIdString, nonce);
+      const { found, isPlayer1 } = await findGame(accountIdString, nonce);
 
-      if (isPlayerInGame) {
+      if (found) {
+        if (isPlayer1) {
+          setCurrentPlayer("X");
+        } else {
+          setCurrentPlayer("O");
+        }
         setCurrentGameNonce(nonce);
         setShowFindGameForm(false);
-        console.log("Successfully joined game:", nonce);
       } else {
         alert("You are not a player in this game or the game was not found.");
       }
@@ -189,7 +200,7 @@ export default function Game() {
   };
 
   const handleFindGame = async () => {
-    if (!nonce || !rawAccountId) {
+    if (!nonceInput || !rawAccountId) {
       alert("Please provide a nonce and connect your wallet");
       return;
     }
@@ -198,7 +209,7 @@ export default function Game() {
     if (typeof window === "undefined") return;
 
     setIsFindingGame(true);
-    await findAndJoinGame(nonce, rawAccountId);
+    await findAndJoinGame(nonceInput, rawAccountId);
     setIsFindingGame(false);
   };
 
@@ -227,6 +238,7 @@ export default function Game() {
     try {
       // TODO: Implement castWin function
       console.log("Cast win functionality not yet implemented");
+
       alert("Cast win functionality not yet implemented");
     } catch (error) {
       console.error("Failed to cast win:", error);
@@ -380,9 +392,11 @@ export default function Game() {
                     </label>
                     <input
                       type="number"
-                      value={nonce || ""}
+                      value={nonceInput || ""}
                       onChange={(e) =>
-                        setNonce(e.target.value ? Number(e.target.value) : null)
+                        setNonceInput(
+                          e.target.value ? Number(e.target.value) : null
+                        )
                       }
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-400"
                       placeholder="Enter nonce (number)"
@@ -391,7 +405,7 @@ export default function Game() {
                   <div className="flex gap-4">
                     <button
                       onClick={handleFindGame}
-                      disabled={isFindingGame || !nonce || !connected}
+                      disabled={isFindingGame || !nonceInput || !connected}
                       className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-all duration-200"
                     >
                       {isFindingGame ? "Finding..." : "Play"}

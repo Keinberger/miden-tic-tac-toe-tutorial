@@ -35,7 +35,7 @@ export async function readBoard(
       .storage()
       .getMapItem(PLAYER1_VALUES_MAPPING_SLOT, nonceWord);
   } catch {
-    console.warn("Player 1 values mapping not found");
+    // throws error if mapping has no values
   }
 
   let player2ValuesMapping: Word | undefined;
@@ -44,7 +44,7 @@ export async function readBoard(
       .storage()
       .getMapItem(PLAYER2_VALUES_MAPPING_SLOT, nonceWord);
   } catch {
-    console.warn("Player 2 values mapping not found");
+    // throws error if mapping has no values
   }
 
   const player1Values = player1ValuesMapping

@@ -28,11 +28,7 @@ import {
 import makeMoveNoteCode from "./notes/make_a_move_code";
 import gameContractCode from "./contracts/tic_tac_toe_code";
 import { TIC_TAC_TOE_CONTRACT_ID } from "./constants";
-import {
-  generateRandomSerialNumber,
-  getNonceWord,
-  instantiateClient,
-} from "./utils";
+import { generateRandomSerialNumber, instantiateClient } from "./utils";
 
 // lib/makeMove.ts
 export async function makeMove(
@@ -83,12 +79,8 @@ export async function makeMove(
 
   const noteScript = assembler.compileNoteScript(makeMoveNoteCode);
 
-  console.log("nonce", nonce);
-  console.log("fieldIndex", fieldIndex);
-
-  const nonceWord = getNonceWord(nonce);
   const noteInputs = new NoteInputs(
-    new FeltArray([...nonceWord.toFelts(), new Felt(BigInt(fieldIndex))])
+    new FeltArray([new Felt(BigInt(nonce)), new Felt(BigInt(fieldIndex))])
   );
   const noteTag = NoteTag.fromAccountId(gameContractAccount.id());
   const metadata = new NoteMetadata(
@@ -117,8 +109,6 @@ export async function makeMove(
     type: TransactionType.Custom,
     payload: tx,
   });
-
-  console.log("makeMoveNote.id().toString()", makeMoveNote.id().toString());
 
   await client.syncState();
 

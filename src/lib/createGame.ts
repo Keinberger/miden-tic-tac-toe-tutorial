@@ -116,8 +116,6 @@ export async function createGame(
     payload: tx,
   });
 
-  console.log("createGameNote.id().toString()", createGameNote.id().toString());
-
   await client.syncState();
 
   // Return the game contract account ID
