@@ -4,16 +4,14 @@ import { WalletMultiButton } from "@demox-labs/miden-wallet-adapter-reactui";
 import { createGame } from "../lib/createGame";
 import { findGame } from "../lib/findGame";
 import { makeMove } from "../lib/makeMove";
+import { castWin } from "../lib/castWin";
 import { type MidenTransaction } from "@demox-labs/miden-wallet-adapter";
-import { readBoard } from "../lib/readBoard";
+import { readBoard, createBoardPoller } from "../lib/readBoard";
 import { convertBoardIndexToContractIndex } from "../lib/utils";
-
-type Player = "X" | "O";
-type BoardState = (Player | null)[];
+import { type Player, type BoardState, type GameStatus } from "../types";
 
 export default function Game() {
   const [board, setBoard] = useState<BoardState>(() => Array(9).fill(null));
-  const [currentPlayer, setCurrentPlayer] = useState<Player>("X");
   const [showCreateGameForm, setShowCreateGameForm] = useState(false);
   const [player1Id, setPlayer1Id] = useState("");
   const [player2Id, setPlayer2Id] = useState("");
@@ -24,12 +22,41 @@ export default function Game() {
   const [isFindingGame, setIsFindingGame] = useState(false);
   const [showFindGameForm, setShowFindGameForm] = useState(false);
   const [isCastingWin, setIsCastingWin] = useState(false);
+  const [gameStatus, setGameStatus] = useState<GameStatus>("playing");
+  const [isPlayerOne, setIsPlayerOne] = useState<boolean | null>(null);
+  const [currentTurnPlayer, setCurrentTurnPlayer] = useState<
+    "player1" | "player2"
+  >("player1");
+  const [isLoadingBoardData, setIsLoadingBoardData] = useState(false);
 
   useEffect(() => {
     if (currentGameNonce) {
-      readBoard(currentGameNonce).then((boardValues) => {
-        console.log("🎲 boardValues", boardValues);
-      });
+      setIsLoadingBoardData(true);
+
+      // Load board data immediately
+      const loadInitialBoard = async () => {
+        try {
+          const boardData = await readBoard(currentGameNonce);
+          updateBoardFromData(boardData);
+          setIsLoadingBoardData(false);
+        } catch (error) {
+          console.error("Error loading initial board:", error);
+          setIsLoadingBoardData(false);
+        }
+      };
+
+      loadInitialBoard();
+
+      // Then start polling for updates
+      const stopPolling = createBoardPoller(
+        currentGameNonce,
+        (boardData) => {
+          updateBoardFromData(boardData);
+        },
+        5000
+      );
+
+      return stopPolling;
     }
   }, [currentGameNonce]);
 
@@ -40,31 +67,173 @@ export default function Game() {
     requestTransaction,
   } = useWallet();
 
-  // Check if there's a winning line for the given player
-  const checkWinningLine = (board: BoardState, player: Player): boolean => {
-    const winningCombinations = [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8], // rows
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8], // columns
-      [0, 4, 8],
-      [2, 4, 6], // diagonals
-    ];
+  const updateBoardFromData = (boardData: {
+    player1Values: number[];
+    player2Values: number[];
+  }) => {
+    const newBoard: BoardState = Array(9).fill(null);
 
-    return winningCombinations.some((combination) =>
+    boardData.player1Values.forEach((index) => {
+      if (index >= 0 && index < 9) {
+        newBoard[index] = "X";
+      }
+    });
+
+    boardData.player2Values.forEach((index) => {
+      if (index >= 0 && index < 9) {
+        newBoard[index] = "O";
+      }
+    });
+
+    setBoard(newBoard);
+    updateGameStatus(newBoard);
+    updateCurrentTurn(boardData);
+  };
+
+  const getWinningCombinations = () => [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+  ];
+
+  const checkWinningLine = (board: BoardState, player: Player): boolean => {
+    return getWinningCombinations().some((combination) =>
       combination.every((index) => board[index] === player)
     );
   };
 
-  // Check if the current connected user has a winning line
-  const currentUserHasWon = (): boolean => {
-    if (!currentGameNonce || !connected) return false;
+  const getWinningLine = (
+    board: BoardState,
+    player: Player
+  ): number[] | null => {
+    const winningCombination = getWinningCombinations().find((combination) =>
+      combination.every((index) => board[index] === player)
+    );
+    return winningCombination || null;
+  };
 
-    // For now, we'll assume the connected user is playing as 'X'
-    // TODO: This should be determined based on which player the connected wallet is
-    return checkWinningLine(board, currentPlayer === "X" ? "O" : "X");
+  const isBoardFull = (board: BoardState): boolean => {
+    return board.every((cell) => cell !== null);
+  };
+
+  const isDrawState = (board: BoardState): boolean => {
+    // Check if board is completely full
+    if (isBoardFull(board)) {
+      return true;
+    }
+
+    // Check if only one empty square remains
+    const emptyCells = board
+      .map((cell, index) => (cell === null ? index : -1))
+      .filter((index) => index !== -1);
+
+    if (emptyCells.length === 1) {
+      const emptyIndex = emptyCells[0];
+
+      // Determine which player would make the next move
+      const player1Count = board.filter((cell) => cell === "X").length;
+      const player2Count = board.filter((cell) => cell === "O").length;
+      const nextPlayer = player1Count === player2Count ? "X" : "O";
+
+      // Simulate the move and check if it would create a winning line
+      const simulatedBoard = [...board];
+      simulatedBoard[emptyIndex] = nextPlayer;
+
+      // If the simulated move doesn't create a winning line, it's a draw
+      if (!checkWinningLine(simulatedBoard, nextPlayer)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const updateGameStatus = (board: BoardState) => {
+    if (checkWinningLine(board, "X")) {
+      setGameStatus("player1_wins");
+    } else if (checkWinningLine(board, "O")) {
+      setGameStatus("player2_wins");
+    } else if (isDrawState(board)) {
+      setGameStatus("draw");
+    } else {
+      setGameStatus("playing");
+    }
+  };
+
+  const currentUserHasWon = (): boolean => {
+    if (!currentGameNonce || !connected || isPlayerOne === null) return false;
+
+    if (isPlayerOne && gameStatus === "player1_wins") return true;
+    if (!isPlayerOne && gameStatus === "player2_wins") return true;
+    return false;
+  };
+
+  const getGameStatusDisplay = (): { text: string; color: string } => {
+    if (isPlayerOne === null)
+      return { text: "Loading...", color: "text-gray-400" };
+
+    switch (gameStatus) {
+      case "player1_wins":
+        return isPlayerOne
+          ? { text: "🎉 You Won!", color: "text-green-400" }
+          : { text: "💔 You Lost", color: "text-red-400" };
+      case "player2_wins":
+        return !isPlayerOne
+          ? { text: "🎉 You Won!", color: "text-green-400" }
+          : { text: "💔 You Lost", color: "text-red-400" };
+      case "draw":
+        return { text: "🤝 It's a Draw!", color: "text-yellow-400" };
+      default:
+        return {
+          text: getTurnStatusText(),
+          color: isCurrentPlayerTurn() ? "text-green-400" : "text-orange-400",
+        };
+    }
+  };
+
+  const updateCurrentTurn = (boardData: {
+    player1Values: number[];
+    player2Values: number[];
+  }) => {
+    const player1Count = boardData.player1Values.length;
+    const player2Count = boardData.player2Values.length;
+
+    if (player1Count === player2Count) {
+      setCurrentTurnPlayer("player1");
+    } else if (player1Count > player2Count) {
+      setCurrentTurnPlayer("player2");
+    } else {
+      setCurrentTurnPlayer("player1");
+    }
+  };
+
+  const isGameEnded = (): boolean => {
+    return gameStatus !== "playing";
+  };
+
+  const isCurrentPlayerTurn = (): boolean => {
+    if (isPlayerOne === null) return false;
+
+    if (isPlayerOne && currentTurnPlayer === "player1") return true;
+    if (!isPlayerOne && currentTurnPlayer === "player2") return true;
+    return false;
+  };
+
+  const getTurnStatusText = (): string => {
+    if (isPlayerOne === null) return "";
+
+    if (isCurrentPlayerTurn()) {
+      return "Your turn to play";
+    } else if (isLoadingBoardData) {
+      return "Loading board...";
+    } else {
+      return "Waiting for opponent...";
+    }
   };
 
   // Internal function to handle making a move
@@ -87,19 +256,13 @@ export default function Game() {
       board[index] ||
       !currentGameNonce ||
       !rawAccountId ||
-      !requestTransaction
+      !requestTransaction ||
+      isGameEnded() ||
+      !isCurrentPlayerTurn()
     )
       return;
 
-    // Only run on client side
     if (typeof window === "undefined") return;
-
-    const newBoard = [...board];
-    newBoard[index] = currentPlayer;
-    setBoard(newBoard);
-
-    const boardValues = await readBoard(currentGameNonce);
-    console.log("🎲 boardValues", boardValues);
 
     await executeMove(
       currentGameNonce,
@@ -167,6 +330,7 @@ export default function Game() {
         requestTransaction
       );
       setCurrentGameNonce(newGameNonce);
+      setIsPlayerOne(true);
       setShowCreateGameForm(false);
       console.log("Game created with nonce:", newGameNonce);
     } catch (error) {
@@ -184,9 +348,9 @@ export default function Game() {
 
       if (found) {
         if (isPlayer1) {
-          setCurrentPlayer("X");
+          setIsPlayerOne(true);
         } else {
-          setCurrentPlayer("O");
+          setIsPlayerOne(false);
         }
         setCurrentGameNonce(nonce);
         setShowFindGameForm(false);
@@ -228,18 +392,32 @@ export default function Game() {
 
   // Boilerplate function for cast win
   const handleCastWin = async () => {
-    if (!currentGameNonce || !rawAccountId) {
+    if (!currentGameNonce || !rawAccountId || !requestTransaction) {
       alert("No game found or wallet not connected");
+      return;
+    }
+
+    if (typeof window === "undefined") return;
+
+    const currentPlayerSymbol = isPlayerOne ? "X" : "O";
+    const winningLine = getWinningLine(board, currentPlayerSymbol);
+
+    if (!winningLine) {
+      alert("No winning line detected");
       return;
     }
 
     setIsCastingWin(true);
 
     try {
-      // TODO: Implement castWin function
-      console.log("Cast win functionality not yet implemented");
+      const txId = await castWin(
+        currentGameNonce,
+        winningLine.map((index) => convertBoardIndexToContractIndex(index)),
+        rawAccountId,
+        requestTransaction
+      );
 
-      alert("Cast win functionality not yet implemented");
+      console.log("Cast win transaction submitted:", txId);
     } catch (error) {
       console.error("Failed to cast win:", error);
       alert("Failed to cast win. Please try again.");
@@ -260,7 +438,7 @@ export default function Game() {
       {/* Title Header - Top Left */}
       <div className="absolute top-6 left-6">
         <div className="bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 px-6 py-4">
-          <h1 className="text-2xl font-semibold text-orange-400">
+          <h1 className="text-xl font-semibold text-orange-400">
             Miden Tic Tac Toe Game
           </h1>
         </div>
@@ -274,15 +452,6 @@ export default function Game() {
               Game: {currentGameNonce}
             </p>
           </div>
-        )}
-        {currentGameNonce && currentUserHasWon() && (
-          <button
-            onClick={handleCastWin}
-            disabled={isCastingWin}
-            className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
-          >
-            {isCastingWin ? "Casting..." : "Cast win"}
-          </button>
         )}
         <WalletMultiButton />
       </div>
@@ -423,17 +592,66 @@ export default function Game() {
           </div>
         ) : (
           <div className="bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 p-8">
-            {/* Tic Tac Toe Board */}
-            <div className="grid grid-cols-3 gap-2">
-              {board.map((cell, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleSquareClick(index)}
-                  className="w-24 h-24 bg-gray-700 hover:bg-gray-600 border-2 border-orange-400 rounded-lg flex items-center justify-center text-4xl font-bold text-orange-400 transition-all duration-200 hover:border-orange-300 hover:shadow-lg hover:shadow-orange-400/20 active:scale-95 flex-shrink-0"
+            {/* Game Status */}
+            <div className="mb-6 text-center">
+              <div className="bg-gray-700 rounded-xl p-4 border border-gray-600">
+                <h3
+                  className={`text-xl font-bold ${
+                    getGameStatusDisplay().color
+                  }`}
                 >
-                  {cell}
+                  {getGameStatusDisplay().text}
+                </h3>
+              </div>
+            </div>
+
+            {/* Cast Win Button */}
+            {currentUserHasWon() && (
+              <div className="mb-6 text-center">
+                <button
+                  onClick={handleCastWin}
+                  disabled={isCastingWin}
+                  className="px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                  {isCastingWin ? "Casting Win..." : "🏆 Cast Win"}
                 </button>
-              ))}
+              </div>
+            )}
+
+            {/* Tic Tac Toe Board */}
+            <div className="relative">
+              <div className="grid grid-cols-3 gap-2">
+                {board.map((cell, index) => {
+                  const isDisabled =
+                    isGameEnded() ||
+                    !isCurrentPlayerTurn() ||
+                    cell !== null ||
+                    isLoadingBoardData;
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleSquareClick(index)}
+                      disabled={isDisabled}
+                      className={`w-24 h-24 border-2 rounded-lg flex items-center justify-center text-4xl font-bold transition-all duration-200 flex-shrink-0 ${
+                        isDisabled
+                          ? "bg-gray-600 border-gray-500 text-gray-400 cursor-not-allowed"
+                          : "bg-gray-700 hover:bg-gray-600 border-orange-400 text-orange-400 hover:border-orange-300 hover:shadow-lg hover:shadow-orange-400/20 active:scale-95"
+                      }`}
+                    >
+                      {cell}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Loading Overlay */}
+              {isLoadingBoardData && (
+                <div className="absolute inset-0 bg-gray-800 bg-opacity-80 flex items-center justify-center rounded-lg">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-orange-400 mx-auto mb-4"></div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
