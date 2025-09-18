@@ -4,6 +4,7 @@ import { WalletMultiButton } from "@demox-labs/miden-wallet-adapter-reactui";
 import { createGame } from "../lib/createGame";
 import { findGame } from "../lib/findGame";
 import { makeMove } from "../lib/makeMove";
+import { makeWinMove } from "../lib/makeWinMove";
 import { castWin } from "../lib/castWin";
 import { type MidenTransaction } from "@demox-labs/miden-wallet-adapter";
 import { readBoard, createBoardPoller } from "../lib/readBoard";
@@ -115,6 +116,21 @@ export default function Game() {
       combination.every((index) => board[index] === player)
     );
     return winningCombination || null;
+  };
+
+  const isWinningMove = (
+    board: BoardState,
+    player: Player,
+    moveIndex: number
+  ): { isWinning: boolean; winningLine: number[] | null } => {
+    const testBoard = [...board];
+    testBoard[moveIndex] = player;
+
+    const winningLine = getWinningLine(testBoard, player);
+    return {
+      isWinning: winningLine !== null,
+      winningLine,
+    };
   };
 
   const isBoardFull = (board: BoardState): boolean => {
@@ -244,10 +260,48 @@ export default function Game() {
     requestTransaction: (transaction: MidenTransaction) => Promise<string>
   ) => {
     try {
+      console.log(
+        "Making move with values: ",
+        nonce,
+        fieldIndex,
+        accountIdString
+      );
       await makeMove(nonce, fieldIndex, accountIdString, requestTransaction);
     } catch (error) {
       console.error("Failed to make move:", error);
       alert("Failed to make move. Please try again.");
+    }
+  };
+
+  // Internal function to handle making a winning move
+  const executeWinMove = async (
+    nonce: number,
+    fieldIndex: number,
+    winningFieldIndex1: number,
+    winningFieldIndex2: number,
+    accountIdString: string,
+    requestTransaction: (transaction: MidenTransaction) => Promise<string>
+  ) => {
+    try {
+      console.log(
+        "Making winning move with values: ",
+        nonce,
+        fieldIndex,
+        winningFieldIndex1,
+        winningFieldIndex2,
+        accountIdString
+      );
+      await makeWinMove(
+        nonce,
+        fieldIndex,
+        winningFieldIndex1,
+        winningFieldIndex2,
+        accountIdString,
+        requestTransaction
+      );
+    } catch (error) {
+      console.error("Failed to make winning move:", error);
+      alert("Failed to make winning move. Please try again.");
     }
   };
 
@@ -264,12 +318,34 @@ export default function Game() {
 
     if (typeof window === "undefined") return;
 
-    await executeMove(
-      currentGameNonce,
-      convertBoardIndexToContractIndex(index),
-      rawAccountId,
-      requestTransaction
+    const currentPlayerSymbol = isPlayerOne ? "X" : "O";
+    const { isWinning, winningLine } = isWinningMove(
+      board,
+      currentPlayerSymbol,
+      index
     );
+
+    if (isWinning && winningLine) {
+      // Use makeWinMove for winning moves
+      const otherIndexes = winningLine.filter((i) => i !== index);
+
+      await executeWinMove(
+        currentGameNonce,
+        convertBoardIndexToContractIndex(index),
+        convertBoardIndexToContractIndex(otherIndexes[0]),
+        convertBoardIndexToContractIndex(otherIndexes[1]),
+        rawAccountId,
+        requestTransaction
+      );
+    } else {
+      // Use regular makeMove for non-winning moves
+      await executeMove(
+        currentGameNonce,
+        convertBoardIndexToContractIndex(index),
+        rawAccountId,
+        requestTransaction
+      );
+    }
   };
 
   // Internal function to generate a new wallet
