@@ -27,12 +27,15 @@ export async function readBoard(
     throw new Error(`Account not found after import: ${gameAccountId}`);
   }
 
+  const nonceWord = getNonceWord(nonce);
+
   let player1ValuesMapping: Word | undefined;
   try {
     player1ValuesMapping = gameAccount
       .storage()
-      .getMapItem(PLAYER1_VALUES_MAPPING_SLOT, getNonceWord(nonce));
-  } catch {
+      .getMapItem(PLAYER1_VALUES_MAPPING_SLOT, nonceWord);
+  } catch (e) {
+    console.error("Error reading player1 values mapping:", e);
     // throws error if mapping has no values
   }
 
@@ -40,8 +43,9 @@ export async function readBoard(
   try {
     player2ValuesMapping = gameAccount
       .storage()
-      .getMapItem(PLAYER2_VALUES_MAPPING_SLOT, getNonceWord(nonce));
-  } catch {
+      .getMapItem(PLAYER2_VALUES_MAPPING_SLOT, nonceWord);
+  } catch (e) {
+    console.error("Error reading player2 values mapping:", e);
     // throws error if mapping has no values
   }
 
